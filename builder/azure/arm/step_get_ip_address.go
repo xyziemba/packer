@@ -45,7 +45,8 @@ func NewStepGetIPAddress(client *AzureClient, ui packer.Ui, endpoint EndpointTyp
 	case PrivateEndpoint:
 		step.get = step.getPrivateIP
 	case PublicEndpoint:
-		step.get = step.getPublicIP
+		//step.get = step.getPublicIP
+		step.get = step.getPublicFqdn
 	}
 
 	return step
@@ -67,6 +68,15 @@ func (s *StepGetIPAddress) getPublicIP(resourceGroupName string, ipAddressName s
 	}
 
 	return *resp.Properties.IPAddress, nil
+}
+
+func (s *StepGetIPAddress) getPublicFqdn(resourceGroupName string, ipAddressName string, interfaceName string) (string, error) {
+	resp, err := s.client.PublicIPAddressesClient.Get(resourceGroupName, ipAddressName, "")
+	if err != nil {
+		return "", err
+	}
+
+	return *resp.Properties.DNSSettings.Fqdn, nil
 }
 
 func (s *StepGetIPAddress) Run(state multistep.StateBag) multistep.StepAction {

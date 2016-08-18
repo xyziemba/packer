@@ -138,6 +138,7 @@ func (b *Builder) Run(ui packer.Ui, hook packer.Hook, cache packer.Cache) (packe
 					return &communicator.WinRMConfig{
 						Username: b.config.UserName,
 						Password: b.config.tmpAdminPassword,
+						CACert:   &b.config.winrmPubkey,
 					}, nil
 				},
 			},

@@ -5,4 +5,5 @@ package communicator
 type WinRMConfig struct {
 	Username string
 	Password string
+	CACert   *[]byte
 }

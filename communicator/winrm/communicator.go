@@ -30,6 +30,7 @@ func New(config *Config) (*Communicator, error) {
 		Port:     config.Port,
 		HTTPS:    config.Https,
 		Insecure: config.Insecure,
+		CACert:   config.CACert,
 
 		/*
 			TODO
@@ -161,5 +162,6 @@ func (c *Communicator) newCopyClient() (*winrmcp.Winrmcp, error) {
 		OperationTimeout:      c.config.Timeout,
 		MaxOperationsPerShell: 15, // lowest common denominator
 		TransportDecorator:    c.config.TransportDecorator,
+		CACertBytes:           *c.config.CACert,
 	})
 }

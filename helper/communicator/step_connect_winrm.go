@@ -107,6 +107,7 @@ func (s *StepConnectWinRM) waitForWinRM(state multistep.StateBag, cancel <-chan 
 
 		user := s.Config.WinRMUser
 		password := s.Config.WinRMPassword
+		var cacert *[]byte
 		if s.WinRMConfig != nil {
 			config, err := s.WinRMConfig(state)
 			if err != nil {
@@ -120,6 +121,9 @@ func (s *StepConnectWinRM) waitForWinRM(state multistep.StateBag, cancel <-chan 
 			if config.Password != "" {
 				password = config.Password
 			}
+			if config.CACert != nil {
+				cacert = config.CACert
+			}
 		}
 
 		log.Println("[INFO] Attempting WinRM connection...")
@@ -132,6 +136,7 @@ func (s *StepConnectWinRM) waitForWinRM(state multistep.StateBag, cancel <-chan 
 			Https:              s.Config.WinRMUseSSL,
 			Insecure:           s.Config.WinRMInsecure,
 			TransportDecorator: s.Config.WinRMTransportDecorator,
+			CACert:             cacert,
 		})
 		if err != nil {
 			log.Printf("[ERROR] WinRM connection err: %s", err)

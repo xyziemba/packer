@@ -15,4 +15,5 @@ type Config struct {
 	Https              bool
 	Insecure           bool
 	TransportDecorator func(*http.Transport) http.RoundTripper
+	CACert             *[]byte
 }

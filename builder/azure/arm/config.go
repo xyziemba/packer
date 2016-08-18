@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io/ioutil"
 	"math/big"
@@ -103,6 +104,7 @@ type Config struct {
 
 	// Authentication with the VM via WinRM
 	winrmCertificate string
+	winrmPubkey      []byte
 
 	Comm communicator.Config `mapstructure:",squash"`
 	ctx  *interpolate.Context
@@ -122,21 +124,50 @@ func (c *Config) toVirtualMachineCaptureParameters() *compute.VirtualMachineCapt
 	}
 }
 
-func (c *Config) createCertificate() (string, error) {
+func (c *Config) createCertificate() (string, []byte, error) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		err = fmt.Errorf("Failed to Generate Private Key: %s", err)
-		return "", err
+		return "", nil, err
 	}
 
-	host := fmt.Sprintf("%s.cloudapp.net", c.tmpComputeName)
+	host := fmt.Sprintf("%s.cloudapp.azure.com", c.tmpComputeName)
 	notBefore := time.Now()
 	notAfter := notBefore.Add(24 * time.Hour)
 
 	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
 		err = fmt.Errorf("Failed to Generate Serial Number: %v", err)
-		return "", err
+		return "", nil, err
+	}
+
+	regionDomains := []string{
+		"%s.eastasia.cloudapp.azure.com",
+		"%s.southeastasia.cloudapp.azure.com",
+		"%s.centralus.cloudapp.azure.com",
+		"%s.eastus.cloudapp.azure.com",
+		"%s.eastus2.cloudapp.azure.com",
+		"%s.westus.cloudapp.azure.com",
+		"%s.northcentralus.cloudapp.azure.com",
+		"%s.southcentralus.cloudapp.azure.com",
+		"%s.northeurope.cloudapp.azure.com",
+		"%s.westeurope.cloudapp.azure.com",
+		"%s.japanwest.cloudapp.azure.com",
+		"%s.japaneast.cloudapp.azure.com",
+		"%s.brazilsouth.cloudapp.azure.com",
+		"%s.australiaeast.cloudapp.azure.com",
+		"%s.australiasoutheast.cloudapp.azure.com",
+		"%s.southindia.cloudapp.azure.com",
+		"%s.centralindia.cloudapp.azure.com",
+		"%s.westindia.cloudapp.azure.com",
+		"%s.canadacentral.cloudapp.azure.com",
+		"%s.canadaeast.cloudapp.azure.com",
+		"%s.westcentralus.cloudapp.azure.com",
+		"%s.westus2.cloudapp.azure.com",
+	}
+	possibleFqdns := make([]string, len(regionDomains))
+	for idx, element := range regionDomains {
+		possibleFqdns[idx] = fmt.Sprintf(element, c.tmpComputeName)
 	}
 
 	template := x509.Certificate{
@@ -150,21 +181,29 @@ func (c *Config) createCertificate() (string, error) {
 		NotBefore: notBefore,
 		NotAfter:  notAfter,
 
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
+
+		DNSNames: possibleFqdns,
+		IsCA:     true,
 	}
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
 	if err != nil {
 		err = fmt.Errorf("Failed to Create Certificate: %s", err)
-		return "", err
+		return "", nil, err
 	}
+
+	pemBytes := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: derBytes,
+	})
 
 	pfxBytes, err := pkcs12.Encode(derBytes, privateKey, c.tmpCertificatePassword)
 	if err != nil {
 		err = fmt.Errorf("Failed to encode certificate as PFX: %s", err)
-		return "", err
+		return "", nil, err
 	}
 
 	keyVaultDescription := keyVaultCertificate{
@@ -176,10 +215,10 @@ func (c *Config) createCertificate() (string, error) {
 	bytes, err := json.Marshal(keyVaultDescription)
 	if err != nil {
 		err = fmt.Errorf("Failed to marshal key vault description: %s", err)
-		return "", err
+		return "", nil, err
 	}
 
-	return base64.StdEncoding.EncodeToString(bytes), nil
+	return base64.StdEncoding.EncodeToString(bytes), pemBytes, nil
 }
 
 func newConfig(raws ...interface{}) (*Config, []string, error) {
@@ -271,8 +310,9 @@ func setWinRMCertificate(c *Config) error {
 		return &ntlmssp.Negotiator{RoundTripper: t}
 	}
 
-	cert, err := c.createCertificate()
+	cert, pubkey, err := c.createCertificate()
 	c.winrmCertificate = cert
+	c.winrmPubkey = pubkey
 
 	return err
 }
