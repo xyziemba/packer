@@ -131,7 +131,12 @@ func (c *Config) createCertificate() (string, []byte, error) {
 		return "", nil, err
 	}
 
-	host := fmt.Sprintf("%s.cloudapp.azure.com", c.tmpComputeName)
+	// Locations can be long form, e.g. "West US", instead of short form.
+	// You can map to short form by removing spaces and lower casing the string.
+	shortLocationName := strings.Replace(c.Location, " ", "", -1)
+	shortLocationName = strings.ToLower(shortLocationName)
+
+	host := fmt.Sprintf("%s.%s.cloudapp.azure.com", c.tmpComputeName, shortLocationName)
 	notBefore := time.Now()
 	notAfter := notBefore.Add(24 * time.Hour)
 
@@ -139,35 +144,6 @@ func (c *Config) createCertificate() (string, []byte, error) {
 	if err != nil {
 		err = fmt.Errorf("Failed to Generate Serial Number: %v", err)
 		return "", nil, err
-	}
-
-	regionDomains := []string{
-		"%s.eastasia.cloudapp.azure.com",
-		"%s.southeastasia.cloudapp.azure.com",
-		"%s.centralus.cloudapp.azure.com",
-		"%s.eastus.cloudapp.azure.com",
-		"%s.eastus2.cloudapp.azure.com",
-		"%s.westus.cloudapp.azure.com",
-		"%s.northcentralus.cloudapp.azure.com",
-		"%s.southcentralus.cloudapp.azure.com",
-		"%s.northeurope.cloudapp.azure.com",
-		"%s.westeurope.cloudapp.azure.com",
-		"%s.japanwest.cloudapp.azure.com",
-		"%s.japaneast.cloudapp.azure.com",
-		"%s.brazilsouth.cloudapp.azure.com",
-		"%s.australiaeast.cloudapp.azure.com",
-		"%s.australiasoutheast.cloudapp.azure.com",
-		"%s.southindia.cloudapp.azure.com",
-		"%s.centralindia.cloudapp.azure.com",
-		"%s.westindia.cloudapp.azure.com",
-		"%s.canadacentral.cloudapp.azure.com",
-		"%s.canadaeast.cloudapp.azure.com",
-		"%s.westcentralus.cloudapp.azure.com",
-		"%s.westus2.cloudapp.azure.com",
-	}
-	possibleFqdns := make([]string, len(regionDomains))
-	for idx, element := range regionDomains {
-		possibleFqdns[idx] = fmt.Sprintf(element, c.tmpComputeName)
 	}
 
 	template := x509.Certificate{
@@ -185,8 +161,7 @@ func (c *Config) createCertificate() (string, []byte, error) {
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 
-		DNSNames: possibleFqdns,
-		IsCA:     true,
+		IsCA: true,
 	}
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
